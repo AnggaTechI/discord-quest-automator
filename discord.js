@@ -80,6 +80,8 @@ function progressOfQuest(quest, taskName) {
 
         if (taskName === "WATCH_VIDEO" || taskName === "WATCH_VIDEO_ON_MOBILE") {
             const enrolledAt = new Date(QuestsStore.quests.get(quest.id)?.userStatus?.enrolledAt ?? Date.now()).getTime();
+            const isVideoComplete = res => res.body?.completed_at != null
+                || (res.body?.progress?.[taskName]?.value ?? 0) >= secondsNeeded;
             let completed = false;
             while (true) {
                 const elapsed = Math.floor((Date.now() - enrolledAt) / 1000);
@@ -91,14 +93,15 @@ function progressOfQuest(quest, taskName) {
                     await new Promise(r => setTimeout(r, 3000));
                     continue;
                 }
-                const value = res.body?.progress?.[taskName]?.value ?? ts;
+                const value = res.body?.progress?.[taskName]?.value ?? 0;
                 console.log(`[${questName}] progress: ${value}/${secondsNeeded}`);
-                if (res.body?.completed_at != null || value >= secondsNeeded) { completed = true; break; }
+                if (isVideoComplete(res)) { completed = true; break; }
                 if (ts >= secondsNeeded) break;
                 await new Promise(r => setTimeout(r, Math.max(2000, (secondsNeeded - elapsed) * 1000)));
             }
             if (!completed) {
-                try { await api.post({ url: `/quests/${quest.id}/video-progress`, body: { timestamp: secondsNeeded } }); } catch (e) {}
+                const res = await api.post({ url: `/quests/${quest.id}/video-progress`, body: { timestamp: secondsNeeded } });
+                if (!isVideoComplete(res)) throw new Error("Video completion was not confirmed by Discord");
             }
             console.log(`[${questName}] Quest completed!`);
         } else if (taskName === "PLAY_ON_DESKTOP") {
